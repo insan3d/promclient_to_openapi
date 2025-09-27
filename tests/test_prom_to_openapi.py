@@ -26,7 +26,7 @@ def test_sync_from_text_defaults() -> None:
 
     t = json.dumps(prometheus_client_to_openapi(metrics=REGISTRY)).encode(encoding="utf-8")
     md5 = hashlib.md5(t).hexdigest()  # noqa: S324
-    assert md5 == "198552cf55c5ede783cbf2ba1819f318"
+    assert md5 == "ea49bdaf6657c617602e0e037d8292ee"
 
 
 def test_sync_from_text_custom() -> None:
@@ -49,7 +49,7 @@ def test_sync_from_text_custom() -> None:
         ),
     ).encode(encoding="utf-8")
     md5 = hashlib.md5(t).hexdigest()  # noqa: S324
-    assert md5 == "35754662d37a6bbb18ca3433b1bffaaa"
+    assert md5 == "d7104af18112acfa38ca2be0b0eea4d8"
 
 
 def test_sync_from_metrics_defaults() -> None:
@@ -57,7 +57,7 @@ def test_sync_from_metrics_defaults() -> None:
 
     t = json.dumps(prometheus_client_to_openapi(metrics=(m1, m2))).encode(encoding="utf-8")
     md5 = hashlib.md5(t).hexdigest()  # noqa: S324
-    assert md5 == "b7fe1b9a118b7e1219804fdec77f30a1"
+    assert md5 == "e84351a3e521eb21a962a7c28de64e85"
 
 
 def test_sync_from_metrics_custom() -> None:
@@ -73,4 +73,4 @@ def test_sync_from_metrics_custom() -> None:
         ),
     ).encode(encoding="utf-8")
     md5 = hashlib.md5(t).hexdigest()  # noqa: S324
-    assert md5 == "fc8659588ba51cb50d7eeebd0b06cd11"
+    assert md5 == "e28ab1b9a25043a1db29a9c8cb20fa04"

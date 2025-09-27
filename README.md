@@ -58,6 +58,8 @@ metrics_schema = prometheus_client_to_openapi(
 )
 ```
 
+**For more advanced usage see below**.
+
 First example will generate default valid OpenAPI schema extended with default `prometheus_client` metrics definitions:
 
 ```yaml
@@ -91,17 +93,6 @@ components:
         process_max_fds:
           $ref: '#/components/schemas/ProcessMaxFds'
       type: object
-      required:
-        - python_gc_objects_collected
-        - python_gc_objects_uncollectable
-        - python_gc_collections
-        - python_info
-        - process_virtual_memory_bytes
-        - process_resident_memory_bytes
-        - process_start_time_seconds
-        - process_cpu_seconds
-        - process_open_fds
-        - process_max_fds
       title: PrometheusClientMetrics
       description: Prometheus-compatible metrics
     PythonGcObjectsCollected:
@@ -112,8 +103,6 @@ components:
       type: object
       title: PythonGcObjectsCollected
       description: Objects collected during gc
-      required:
-        - generation
     PythonGcObjectsUncollectable:
       properties:
         generation:
@@ -122,8 +111,6 @@ components:
       type: object
       title: PythonGcObjectsUncollectable
       description: Uncollectable objects found during GC
-      required:
-        - generation
     PythonGcCollections:
       properties:
         generation:
@@ -132,8 +119,6 @@ components:
       type: object
       title: PythonGcCollections
       description: Number of times this generation was collected
-      required:
-        - generation
     PythonInfo:
       properties:
         implementation:
@@ -154,12 +139,6 @@ components:
       type: object
       title: PythonInfo
       description: Python platform information
-      required:
-        - implementation
-        - major
-        - minor
-        - patchlevel
-        - version
     ProcessVirtualMemoryBytes:
       properties: {}
       type: object
@@ -191,6 +170,115 @@ components:
       title: ProcessMaxFds
       description: Maximum number of open file descriptors.
 ```
+
+## Real advanced FastAPI example:
+
+```python
+# For openapi_tags field, application should be instanciated normally, not using
+# fastapi.openapi.utils.get_openapi() function.
+app = FastAPI(
+    title=__prog__,
+    summary=summary,
+    description=__doc__,
+    version=f"{__version__} {__status__}",
+    contact={"name": __author__, "email": __email__},
+    openapi_tags=[
+        {"name": "Internal", "description": "Internal endpoints."},
+    ],
+    docs_url=None,
+    redoc_url=None,
+)
+
+# Genearate metrics schema and save default method with another name.
+metrics_schema = prometheus_client_to_openapi(metrics=REGISTRY)
+app.default_openapi = app.openapi
+
+
+# This way custom schema (for metrics) is prepended to OpenAPI specification.
+def custom_openapi() -> dict[str, Any]:
+    """Modify default OpenAPI spec for metrics to be documented."""
+
+    # This should be called only once, obviously.
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = app.default_openapi()
+    openapi_schema["components"]["schemas"].update(metrics_schema)
+
+    # FastAPI inserts "type" parameter here so ReDoc cannot handle custom schema
+    # reference.
+    del openapi_schema["paths"]["/metrics"]["get"]["responses"]["200"]["content"]["application/openmetrics-text"]["schema"]["type"]
+
+    # Also remove default 422 Validation Error from documentation since there is
+    # no actual validation of Accept header, just some kind of negotiation to
+    # support "Accept: application/openmetrics-text".
+    del openapi_schema["paths"]["/metrics"]["get"]["responses"]["422"]
+
+    app.openapi_schema = openapi_schema
+    return openapi_schema
+
+
+# Now replace default .openapi() method with custom.
+app.openapi = custom_openapi
+```
+
+And handler:
+
+```python
+class MetricsResponse(Response):
+    """Prometheus-compatible metrics response."""
+
+    media_type = "application/openmetrics-text"
+
+    def render(self, content: Any) -> bytes:
+        return generate_latest()
+
+
+def serve_metrics(
+    accept: Annotated[
+        str | None,
+        Header(
+            description="Accept HTTP header for content-type negotiation with Prometheus server.",
+            examples=["application/openmetrics-text", "text/plain"],
+        ),
+    ] = None,
+) -> MetricsResponse:
+    """Serve application metrics."""
+
+    if accept is not None and "application/openmetrics-text" in accept.lower():
+        return MetricsResponse(media_type="application/openmetrics-text")
+
+    return MetricsResponse(media_type="text/plain")
+
+
+router.add_api_route(
+    path="/metrics",
+    endpoint=serve_metrics,
+    name="Metrics",
+    description="Get application metrics in Prometheus-compatible format.",
+    response_class=MetricsResponse,
+    responses={
+        status.HTTP_200_OK: {
+            "content": {
+                "application/openmetrics-text": {
+                    "schema": {
+                        "$ref": "#/components/schemas/PrometheusClientMetrics",
+                    },
+                },
+                "text/plain": {
+                    "schema": {
+                        "$ref": "#/components/schemas/PrometheusClientMetrics",
+                    },
+                },
+            },
+        },
+    },
+)
+```
+
+## Changelog:
+
+- `1.0.1`: (27.09.2025): remove `required` field completely.
 
 ## TODO
 

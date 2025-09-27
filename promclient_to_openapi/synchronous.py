@@ -49,7 +49,6 @@ def prometheus_client_to_openapi(
         property_name: {
             "properties": {},
             "type": "object",
-            "required": [],
             "title": property_name,
             "description": description,
         },
@@ -83,13 +82,11 @@ def prometheus_client_to_openapi(
             "$ref": f"#/components/schemas/{metric_name_pascalized}",
         }
 
-        schemas[property_name]["required"].append(metric_name)
         schemas[metric_name_pascalized] = {
             "properties": {},
             "type": "object",
             "title": metric_name_pascalized,
             "description": metric_description,
-            "required": [],
         }
 
         label_name: str
@@ -101,11 +98,5 @@ def prometheus_client_to_openapi(
 
             if label_name.lower() in labels_descriptions:  # pyright: ignore[reportUnknownMemberType]
                 schemas[metric_name_pascalized]["properties"][label_name]["description"] = labels_descriptions[label_name]
-
-            schemas[metric_name_pascalized]["required"].append(label_name)
-
-        # Should not have fewer than 1 items.
-        if not schemas[metric_name_pascalized]["required"]:
-            schemas[metric_name_pascalized].pop("required")
 
     return schemas
