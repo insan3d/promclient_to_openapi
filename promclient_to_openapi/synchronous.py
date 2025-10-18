@@ -3,18 +3,16 @@
 from collections.abc import Iterable
 from typing import Any
 
-from prometheus_client import generate_latest
 from prometheus_client.metrics import MetricWrapperBase
 from prometheus_client.metrics_core import Metric
-from prometheus_client.parser import text_string_to_metric_families
-from prometheus_client.registry import CollectorRegistry
+from prometheus_client.registry import Collector, CollectorRegistry
 
-from promclient_to_openapi.utils import snake_to_pascal
+from promclient_to_openapi.utils import normalize_describe_labels, snake_to_pascal
 
 
 def prometheus_client_to_openapi(
     metrics: CollectorRegistry | Iterable[MetricWrapperBase],
-    describe_labels: dict[str, str] | None = None,
+    describe_labels: dict[str, dict[str, str]] | None = None,
     property_name: str = "PrometheusClientMetrics",
     description: str = "Prometheus-compatible metrics",
 ) -> dict[str, Any]:
@@ -29,7 +27,7 @@ def prometheus_client_to_openapi(
 
     Args:
         metrics: Collector registry to generate metrics or list of actual metrics objects.
-        describe_labels: Mapping of labels description (case-insensitive).
+        describe_labels: Mapping metric names to dictionaries with label names and descriptions.
         property_name: Main property name.
         description: Main property description.
 
@@ -37,13 +35,8 @@ def prometheus_client_to_openapi(
         Dictionary of schema to be converted to OpenAPI JSON.
     """
 
-    if describe_labels is None:
-        labels_descriptions = {}
-
-    else:
-        labels_descriptions = describe_labels.copy()
-        for key in describe_labels:
-            labels_descriptions[key.lower()] = describe_labels[key]
+    # Normalized dict[str, dict[str, str]].
+    labels_descriptions = normalize_describe_labels(describe_labels)
 
     schemas: dict[str, Any] = {
         property_name: {
@@ -54,10 +47,40 @@ def prometheus_client_to_openapi(
         },
     }
 
-    if isinstance(metrics, CollectorRegistry):
-        text = generate_latest(registry=metrics).decode(encoding="utf-8")
-        families = text_string_to_metric_families(text=text)
+    # prometheus_client library have two types of entities: for example, a Gauge
+    # and a GaugeMetricFamily. As a programmer, you may initialize a Gauge once
+    # on top of your module, which will generate second type as standalone
+    # collector and add it to Registry object.
+    #
+    # Or you can write your own Collector class with .collect() generator which
+    # should yield *MetricFamily instances.
+    #
+    # In this case we can use generate_latest() to render text metrics (call
+    # every collector's .collect() method under the hood) or iterate by owselves)
 
+    # Case 1 -- provided a full CollectorRegistry() (e.g. default REGISTRY) with
+    # possibly unpopulated metrics (without samples).
+    families: Iterable[Metric] | Iterable[MetricWrapperBase] = []
+    if isinstance(metrics, CollectorRegistry):
+        # This is kinda easier:
+        #
+        # text = generate_latest(registry=metrics).decode(encoding="utf-8")  # noqa: ERA001
+        # families = text_string_to_metric_families(text=text)  # noqa: ERA001
+
+        # Get all the actuall collectors (either custom ones such as
+        # ProcessCollector or just a "metrics" such as Gauge() which is an
+        # instance of Collector() actually) exploiting internal dictionary of
+        # collectors.
+        collector: Collector
+        for collector in metrics._names_to_collectors.values():  # pyright: ignore[reportPrivateUsage]  # noqa: SLF001
+
+            # To be safe because .collect() may be a generator and a function
+            # with returned iterable.
+            for metric in collector.collect():
+                families.append(metric)
+
+    # Case 2 -- provided iterable of MetricWrappers (such as Gauge() or
+    # Counter()). Just copy those wrappers for next loop to handle
     else:
         families = metrics
 
@@ -66,13 +89,11 @@ def prometheus_client_to_openapi(
             metric_name_pascalized = snake_to_pascal(metric.name)
             metric_name = metric.name
             metric_description = metric.documentation
-            metric_labels_names = metric.samples[0].labels.keys()
 
         elif isinstance(metric, MetricWrapperBase):  # pyright: ignore[reportUnnecessaryIsInstance]
             metric_name_pascalized = snake_to_pascal(metric._name)  # pyright: ignore[reportPrivateUsage, reportUnknownArgumentType, reportUnknownMemberType]  # noqa: SLF001
             metric_name: str = metric._name  # pyright: ignore[reportUnknownVariableType, reportPrivateUsage, reportUnknownMemberType]  # noqa: SLF001
             metric_description = metric._documentation  # pyright: ignore[reportPrivateUsage] # noqa: SLF001
-            metric_labels_names: Iterable[str] = metric._labelnames  # pyright: ignore[reportPrivateUsage, reportUnknownMemberType, reportUnknownVariableType]  # noqa: SLF001
 
         else:
             msg = f"Unknown metric type: {type(metric)}"
@@ -89,14 +110,13 @@ def prometheus_client_to_openapi(
             "description": metric_description,
         }
 
-        label_name: str
-        for label_name in metric_labels_names:  # pyright: ignore[reportUnknownVariableType]
+        # No idea why PyRight assumes those are not strings.
+        this_metric_labels_descriptions: dict[str, str] = labels_descriptions.get(metric_name.lower(), {})  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+        for label_name, label_description in this_metric_labels_descriptions.items():
             schemas[metric_name_pascalized]["properties"][label_name] = {
                 "type": "string",
-                "title": label_name.capitalize(),  # pyright: ignore[reportUnknownMemberType]
+                "description": label_description,
+                "title": label_name.capitalize(),
             }
-
-            if label_name.lower() in labels_descriptions:  # pyright: ignore[reportUnknownMemberType]
-                schemas[metric_name_pascalized]["properties"][label_name]["description"] = labels_descriptions[label_name]
 
     return schemas

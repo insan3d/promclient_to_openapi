@@ -48,7 +48,7 @@ m1.labels(("1",)).set(value=1)
 m2 = Gauge(name="test_metric_bar", documentation="Test metric", labelnames=("metric",))
 m2.labels(("2",)).set(value=2)
 
-labels_descriptions: dict[str, str] = {"metric": "Test label"}
+labels_descriptions: dict[str, str] = {"Test metric": {"metric": "Test label"}}
 
 metrics_schema = prometheus_client_to_openapi(
     metrics=(m1, m2),
@@ -120,22 +120,6 @@ components:
       title: PythonGcCollections
       description: Number of times this generation was collected
     PythonInfo:
-      properties:
-        implementation:
-          type: string
-          title: Implementation
-        major:
-          type: string
-          title: Major
-        minor:
-          type: string
-          title: Minor
-        patchlevel:
-          type: string
-          title: Patchlevel
-        version:
-          type: string
-          title: Version
       type: object
       title: PythonInfo
       description: Python platform information
@@ -278,6 +262,7 @@ router.add_api_route(
 
 ## Changelog:
 
+- `1.0.2`: (18.10.2025): redo label descriptions, commented code.
 - `1.0.1`: (27.09.2025): remove `required` field completely.
 
 ## TODO
