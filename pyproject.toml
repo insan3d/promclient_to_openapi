@@ -1,6 +1,6 @@
 [project]
 name = "promclient_to_openapi"
-version = "1.0.2"
+version = "1.1.1"
 
 description = "Translates prometheus_client metrics into OpenAPI specification."
 readme = "README.md"
@@ -19,6 +19,7 @@ classifiers = [
 
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.121.0",
     "prometheus-client>=0.22.1",
 ]
 
