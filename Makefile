@@ -2,7 +2,7 @@
 
 venv: .venv
 .venv:
-	uv venv --allow-existing --system-site-packages
+	uv venv --allow-existing
 
 deps: venv
 	uv pip install -r pyproject.toml --extra dev

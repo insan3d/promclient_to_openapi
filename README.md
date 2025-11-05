@@ -262,9 +262,11 @@ router.add_api_route(
 
 ## Changelog:
 
+- `1.1.1`: (05.11.2025): added FastAPI helpers and Apt/Pip Info metrics helpers.
 - `1.0.2`: (18.10.2025): redo label descriptions, commented code.
 - `1.0.1`: (27.09.2025): remove `required` field completely.
 
 ## TODO
 
-- Add [`aioprometheus`](https://pypi.org/project/aioprometheus/) support
+- Add [`aioprometheus`](https://pypi.org/project/aioprometheus/) support.
+- Document helper functions and rewrite `README.md`.
